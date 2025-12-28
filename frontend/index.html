@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Civic Incident Commander</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="poll-results-styles.css" />
+    <script src="config.js"></script>
+  </head>
+  <body>
+    <canvas class="bg-particles" id="particles" aria-hidden="true"></canvas>
+    <div class="bg-grid" aria-hidden="true"></div>
+
+    <!-- AUTH SCREEN (shown when not logged in) -->
+    <div id="authScreen" class="authScreen" style="display: flex;">
+      <canvas class="authParticles" id="authParticles" aria-hidden="true"></canvas>
+      
+      <div class="authCard">
+        <div class="authHeader">
+          <div class="authLogo">
+            <div class="brand__dot pulse"></div>
+            <div class="authLogoRings">
+              <div class="ring ring-1"></div>
+              <div class="ring ring-2"></div>
+              <div class="ring ring-3"></div>
+            </div>
+          </div>
+          <h1>Civic Incident Commander</h1>
+          <p class="authTagline">Real-Time Emergency Response Platform</p>
+        </div>
+
+        <!-- Login Form -->
+        <div id="loginForm" class="authForm">
+          <h2>Welcome Back</h2>
+          <p class="authSubtitle">Sign in to access the command center</p>
+          
+          <div class="inputGroup">
+            <div class="inputIcon">📧</div>
+            <input class="authInput" type="email" id="loginEmail" placeholder="Email address" required />
+          </div>
+          
+          <div class="inputGroup">
+            <div class="inputIcon">🔒</div>
+            <input class="authInput" type="password" id="loginPassword" placeholder="Password" required />
+          </div>
+
+          <button class="authButton authButton--primary" id="loginBtn" type="button">
+            <span class="btnText">Sign In</span>
+            <span class="btnShine"></span>
+          </button>
+
+          <div class="authDivider">
+            <span>New to the platform?</span>
+          </div>
+
+          <button class="authButton authButton--secondary" id="showSignupBtn" type="button">
+            Create Account
+          </button>
+        </div>
+
+        <!-- Signup Form -->
+        <div id="signupForm" class="authForm" hidden>
+          <h2>Join the Response Team</h2>
+          <p class="authSubtitle">Create your account to get started</p>
+          
+          <div class="inputGroup">
+            <div class="inputIcon">👤</div>
+            <input class="authInput" type="text" id="signupName" placeholder="Full name" required />
+          </div>
+          
+          <div class="inputGroup">
+            <div class="inputIcon">📧</div>
+            <input class="authInput" type="email" id="signupEmail" placeholder="Email address" required />
+          </div>
+          
+          <div class="inputGroup">
+            <div class="inputIcon">🔒</div>
+            <input class="authInput" type="password" id="signupPassword" placeholder="Password (min 4 characters)" required minlength="4" />
+          </div>
+          
+          <div class="roleSelection">
+            <span class="roleTitle">Select Your Role:</span>
+            <div class="roleOptions">
+              <label class="roleCard">
+                <input type="radio" name="role" value="citizen" checked />
+                <div class="roleCardContent">
+                  <div class="roleIcon">👥</div>
+                  <div class="roleInfo">
+                    <div class="roleName">Citizen</div>
+                    <div class="roleDesc">Report and verify incidents</div>
+                  </div>
+                  <div class="roleCheck">✓</div>
+                </div>
+              </label>
+              
+              <label class="roleCard">
+                <input type="radio" name="role" value="admin" />
+                <div class="roleCardContent">
+                  <div class="roleIcon">🚨</div>
+                  <div class="roleInfo">
+                    <div class="roleName">Responder</div>
+                    <div class="roleDesc">Manage emergency operations</div>
+                  </div>
+                  <div class="roleCheck">✓</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <button class="authButton authButton--primary" id="signupBtn" type="button">
+            <span class="btnText">Create Account</span>
+            <span class="btnShine"></span>
+          </button>
+
+          <div class="authDivider">
+            <span>Already have an account?</span>
+          </div>
+
+          <button class="authButton authButton--secondary" id="showLoginBtn" type="button">
+            Sign In Instead
+          </button>
+        </div>
+
+        <div class="authToast" id="authToast" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <header class="topbar" id="mainHeader" style="display: none;">
+      <div class="brand">
+        <div class="brand__dot pulse"></div>
+        <div>
+          <div class="brand__title">Civic Incident Commander</div>
+          <div class="brand__subtitle">Operational clarity • Verification • Prioritization</div>
+        </div>
+      </div>
+
+      <div class="statusline">
+        <div class="chip" id="userChip">Guest</div>
+        <div class="chip chip--live" id="liveChip">LIVE</div>
+        <div class="chip" id="pollChip">Polling Active</div>
+        <div class="chip" id="refreshChip">Last refresh: —</div>
+        <button class="viewToggle" id="viewToggle" title="Switch view">Admin View</button>
+        <button class="btn btn--danger" id="logoutBtn" style="margin-left: 8px;">Logout</button>
+      </div>
+    </header>
+
+    <main class="layout" id="mainLayout" style="display: none;">
+      <section class="panel panel--left">
+        <div class="panel__header">
+          <div class="panel__title">Priority Queue</div>
+          <div class="panel__meta" id="queueMeta">0 incidents</div>
+        </div>
+
+        <div class="incidentList" id="incidentList"></div>
+      </section>
+
+      <section class="panel panel--center" id="centerPanel">
+        <!-- CITIZEN VIEW: Report Form -->
+        <div id="citizenView">
+          <div class="panel__header">
+            <div class="panel__title">Report Incident</div>
+            <div class="panel__meta" id="geoMeta">Location: unknown</div>
+          </div>
+
+          <form class="form" id="reportForm">
+            <div class="row">
+              <label class="field">
+                <span class="field__label">Type</span>
+                <select class="field__input" id="typeSelect" required>
+                  <option value="fire">Fire</option>
+                  <option value="medical">Medical</option>
+                  <option value="flood">Flood</option>
+                  <option value="power">Power Outage</option>
+                  <option value="traffic">Traffic / Road</option>
+                  <option value="general" selected>General</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span class="field__label">Severity (citizen estimate)</span>
+                <select class="field__input" id="severitySelect">
+                  <option value="info">Info</option>
+                  <option value="attention" selected>Attention</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="field">
+              <span class="field__label">Description (short)</span>
+              <input class="field__input" id="descInput" maxlength="220" placeholder="What happened?" required />
+            </label>
+
+            <label class="field">
+              <span class="field__label">Location</span>
+              <input class="field__input" id="locationInput" placeholder="e.g., Victoria Memorial, Kolkata or MG Road, Bangalore" />
+              <span class="field__hint">Enter a location name or click "Use My Location" below.</span>
+            </label>
+
+            <div class="actions">
+              <button class="btn" type="button" id="useGeoBtn">Use My Location</button>
+              <button class="btn btn--primary" id="submitBtn" type="submit">Submit Report</button>
+            </div>
+
+            <div class="toast" id="toast" role="status" aria-live="polite"></div>
+          </form>
+        </div>
+
+        <!-- ADMIN VIEW: Responder Dashboard -->
+        <div id="adminView" hidden>
+          <div class="panel__header">
+            <div class="panel__title">Responder Dashboard</div>
+            <div class="panel__meta" id="dashMeta">Operations Overview</div>
+          </div>
+
+          <div class="form">
+            <div class="metricsGrid" id="metricsGrid">
+              <div class="metricCard">
+                <div class="metricValue" id="metricTotal">0</div>
+                <div class="metricLabel">Total Active</div>
+              </div>
+              <div class="metricCard metricCard--critical">
+                <div class="metricValue" id="metricCritical">0</div>
+                <div class="metricLabel">Critical</div>
+              </div>
+              <div class="metricCard metricCard--warn">
+                <div class="metricValue" id="metricUnverified">0</div>
+                <div class="metricLabel">Unverified</div>
+              </div>
+              <div class="metricCard metricCard--ok">
+                <div class="metricValue" id="metricResponding">0</div>
+                <div class="metricLabel">Responding</div>
+              </div>
+            </div>
+
+            <div class="filterSection">
+              <div class="filterTitle">Quick Filters</div>
+              <div class="row">
+                <label class="field">
+                  <span class="field__label">Status</span>
+                  <select class="field__input" id="filterStatus">
+                    <option value="">All</option>
+                    <option value="unverified">Unverified</option>
+                    <option value="crowd_confirmed">Crowd Confirmed</option>
+                    <option value="verified">Verified</option>
+                    <option value="responding">Responding</option>
+                    <option value="resolved">Resolved</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field__label">Severity</span>
+                  <select class="field__input" id="filterSeverity">
+                    <option value="">All</option>
+                    <option value="critical">Critical</option>
+                    <option value="attention">Attention</option>
+                    <option value="info">Info</option>
+                  </select>
+                </label>
+              </div>
+              <div class="row">
+                <label class="field">
+                  <span class="field__label">Type</span>
+                  <select class="field__input" id="filterType">
+                    <option value="">All</option>
+                    <option value="fire">Fire</option>
+                    <option value="medical">Medical</option>
+                    <option value="flood">Flood</option>
+                    <option value="power">Power Outage</option>
+                    <option value="traffic">Traffic / Road</option>
+                    <option value="general">General</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field__label">Min Priority</span>
+                  <input class="field__input" id="filterMinPriority" type="number" placeholder="0" min="0" />
+                </label>
+              </div>
+              <div class="row">
+                <label class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+                  <input type="checkbox" id="hideResolved" style="width: auto; margin: 0;" />
+                  <span class="field__label" style="margin: 0;">Hide Resolved Incidents</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="quickActions">
+              <button class="btn btn--primary" id="refreshBtn">Refresh Now</button>
+              <button class="btn" id="clearFiltersBtn">Clear Filters</button>
+            </div>
+
+            <div class="toast" id="toastAdmin" role="status" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel panel--right">
+        <div class="panel__header">
+          <div class="panel__title">Incident Details</div>
+          <div class="panel__meta" id="detailMeta">Select an incident</div>
+          <button class="closeBtn" id="closeDetailsBtn" title="Close details panel">×</button>
+        </div>
+
+        <div class="details" id="details">
+          <div class="empty">No incident selected.</div>
+        </div>
+
+        <div class="panel__footer" id="adminFooter" hidden>
+          <div class="adminTitle">Responder Controls</div>
+          <div class="adminControls">
+            <label class="field">
+              <span class="field__label">Status</span>
+              <select class="field__input" id="adminStatus">
+                <option value="unverified">unverified</option>
+                <option value="crowd_confirmed">crowd_confirmed</option>
+                <option value="verified">verified</option>
+                <option value="responding">responding</option>
+                <option value="resolved">resolved</option>
+              </select>
+            </label>
+            <button class="btn btn--danger" id="setStatusBtn">Update Status</button>
+
+            <label class="field" style="grid-column: 1 / -1;">
+              <span class="field__label">Internal notes</span>
+              <textarea class="field__input" id="adminNotes" rows="4" placeholder="Responder notes (not visible to citizens)"></textarea>
+            </label>
+            <button class="btn" id="saveNotesBtn">Save Notes</button>
+            
+            <div style="grid-column: 1 / -1; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--stroke);">
+              <button class="btn btn--danger" id="deleteIncidentBtn" style="width: 100%;">Delete Incident Permanently</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- CUSTOM MODAL FOR CONFIRMATIONS -->
+    <div id="customModal" class="customModal" style="display: none;">
+      <div class="modalOverlay"></div>
+      <div class="modalContent">
+        <div class="modalIcon" id="modalIcon">⚠️</div>
+        <h3 class="modalTitle" id="modalTitle">Confirm Action</h3>
+        <p class="modalMessage" id="modalMessage">Are you sure?</p>
+        <div class="modalButtons">
+          <button class="modalBtn modalBtn--cancel" id="modalCancelBtn">Cancel</button>
+          <button class="modalBtn modalBtn--confirm" id="modalConfirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

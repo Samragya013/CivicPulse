@@ -1,0 +1,18 @@
+services:
+  # Full-Stack Application (Backend + Frontend in one service)
+  - type: web
+    name: civic-incident-commander
+    runtime: node
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true

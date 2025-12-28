@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Civic Incident Commander - Render Deployment Script
+# CivicPulse - Render Deployment Script
 
-echo "🚀 Civic Incident Commander - Render Deployment Helper"
+echo "🚀 CivicPulse - Render Deployment Helper"
 echo "=================================================="
 echo ""
 

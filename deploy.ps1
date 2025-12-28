@@ -1,6 +1,6 @@
-# Civic Incident Commander - Render Deployment Script for Windows
+# CivicPulse - Render Deployment Script for Windows
 
-Write-Host "🚀 Civic Incident Commander - Render Deployment Helper" -ForegroundColor Cyan
+Write-Host "🚀 CivicPulse - Render Deployment Helper" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host ""
 

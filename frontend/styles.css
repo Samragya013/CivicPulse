@@ -1239,6 +1239,25 @@ input[type="file"].field__input::file-selector-button:hover{
   transform: translateY(-1px);
 }
 
+.authButton--google {
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.12);
+  color: #1f1f1f;
+  font-weight: 500;
+}
+
+.authButton--google:hover {
+  background: #f8f9fa;
+  border-color: rgba(0,0,0,0.18);
+  box-shadow: 0 2px 8px rgba(66,133,244,0.3);
+  transform: translateY(-1px);
+}
+
+.authButton--google:active {
+  background: #f1f3f4;
+  transform: translateY(0);
+}
+
 .authDivider {
   margin: 24px 0 16px;
   text-align: center;

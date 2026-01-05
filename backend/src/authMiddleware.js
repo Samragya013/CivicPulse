@@ -1,6 +1,12 @@
-// JWT Authentication Middleware
+// Firebase Authentication Middleware
+let adminInstance = null;
+
+export function setAdminInstance(admin) {
+  adminInstance = admin;
+}
+
 export function authMiddleware(userStore) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -8,28 +14,80 @@ export function authMiddleware(userStore) {
     }
 
     const token = authHeader.slice(7); // Remove 'Bearer ' prefix
-    const decoded = userStore.verifyToken(token);
 
-    if (!decoded) {
+    try {
+      if (!adminInstance) {
+        throw new Error('Firebase Admin not initialized');
+      }
+
+      // Verify Firebase ID token
+      const decodedToken = await adminInstance.auth().verifyIdToken(token);
+      
+      // Get user profile from userStore
+      const user = await userStore.getUserByFirebaseUid(decodedToken.uid);
+      
+      if (!user) {
+        // User not in our database yet, create basic profile
+        const newUser = await userStore.createOrUpdateUser({
+          firebase_uid: decodedToken.uid,
+          email: decodedToken.email,
+          name: decodedToken.name || decodedToken.email?.split('@')[0] || 'User',
+          role: 'citizen'
+        });
+
+        req.user = {
+          firebase_uid: decodedToken.uid,
+          user_id: newUser.id,
+          email: decodedToken.email,
+          role: newUser.role,
+          name: newUser.name
+        };
+      } else {
+        req.user = {
+          firebase_uid: decodedToken.uid,
+          user_id: user.id,
+          email: decodedToken.email,
+          role: user.role,
+          name: user.name
+        };
+      }
+      
+      next();
+    } catch (error) {
+      console.error('Token verification failed:', error);
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
-
-    // Attach user info to request
-    req.user = decoded;
-    next();
   };
 }
 
 // Optional auth middleware (doesn't fail if no token)
 export function optionalAuthMiddleware(userStore) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const authHeader = req.headers.authorization;
     
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
-      const decoded = userStore.verifyToken(token);
-      if (decoded) {
-        req.user = decoded;
+      
+      try {
+        if (!adminInstance) {
+          throw new Error('Firebase Admin not initialized');
+        }
+
+        const decodedToken = await adminInstance.auth().verifyIdToken(token);
+        const user = await userStore.getUserByFirebaseUid(decodedToken.uid);
+        
+        if (user) {
+          req.user = {
+            firebase_uid: decodedToken.uid,
+            user_id: user.id,
+            email: decodedToken.email,
+            role: user.role,
+            name: user.name
+          };
+        }
+      } catch (error) {
+        // Ignore token verification errors in optional auth
+        console.log('Optional auth: token verification failed');
       }
     }
 
@@ -49,3 +107,4 @@ export function adminOnlyMiddleware(req, res, next) {
 
   next();
 }
+

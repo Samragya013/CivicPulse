@@ -845,8 +845,8 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## 📞 Support
 
 For questions, issues, or feature requests:
-- 🐛 [Open an Issue](https://github.com/yourusername/CivicPulse/issues)
-- 💬 [Discussions](https://github.com/yourusername/CivicPulse/discussions)
+- 🐛 [Open an Issue](https://github.com/Samragya013/CivicPulse/issues)
+- 💬 [Discussions](https://github.com/Samragya013/CivicPulse/discussions)
 - 📧 Email: support@civicpulse.example.com
 
 ---

@@ -3,10 +3,11 @@ import cors from 'cors';
 import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import admin from 'firebase-admin';
 import { IncidentStore } from './store.js';
 import { UserStore } from './userStore.js';
 import { PollStore } from './pollStore.js';
-import { authMiddleware, optionalAuthMiddleware, adminOnlyMiddleware } from './authMiddleware.js';
+import { authMiddleware, optionalAuthMiddleware, adminOnlyMiddleware, setAdminInstance } from './authMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +22,35 @@ export async function createApp() {
   await userStore.init();
   await pollStore.init();
 
+  // Initialize Firebase Admin if not already initialized
+  if (!admin.apps.length) {
+    const serviceAccount = {
+      type: "service_account",
+      project_id: process.env.FIREBASE_PROJECT_ID || "civicpulse-47043",
+      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+      private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      client_id: process.env.FIREBASE_CLIENT_ID,
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+      client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL
+    };
+
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: process.env.FIREBASE_PROJECT_ID || "civicpulse-47043"
+      });
+      console.log('[app] Firebase Admin initialized successfully');
+    } catch (error) {
+      console.error('[app] Firebase Admin initialization failed:', error.message);
+    }
+  }
+
+  // Set admin instance for middleware
+  setAdminInstance(admin);
+
   app.disable('x-powered-by');
   app.use(cors());
   app.use(express.json({ limit: '6mb' }));
@@ -34,32 +64,31 @@ export async function createApp() {
   });
 
   // =============================================================================
-  // AUTHENTICATION ENDPOINTS
+  // AUTHENTICATION ENDPOINTS (Firebase-based)
   // =============================================================================
 
-  // POST /api/auth/signup
-  app.post('/api/auth/signup', async (req, res) => {
-    try {
-      const result = await userStore.signup(req.body);
-      res.status(201).json(result);
-    } catch (e) {
-      res.status(e.statusCode ?? 500).json({ error: e.message ?? 'Signup failed' });
-    }
-  });
-
-  // POST /api/auth/login
-  app.post('/api/auth/login', async (req, res) => {
-    try {
-      const result = await userStore.login(req.body);
-      res.json(result);
-    } catch (e) {
-      res.status(e.statusCode ?? 500).json({ error: e.message ?? 'Login failed' });
-    }
-  });
-
-  // GET /api/auth/verify (validate JWT)
-  app.get('/api/auth/verify', authMiddleware(userStore), (req, res) => {
+  // GET /api/user/profile - Get or create user profile
+  app.get('/api/user/profile', authMiddleware(userStore), (req, res) => {
     res.json({ user: req.user });
+  });
+
+  // POST /api/user/profile - Create/update user profile
+  app.post('/api/user/profile', authMiddleware(userStore), async (req, res) => {
+    try {
+      const { name, email, role } = req.body;
+      const firebase_uid = req.user.firebase_uid;
+
+      const user = await userStore.createOrUpdateUser({
+        firebase_uid,
+        email: email || req.user.email,
+        name: name || req.user.name || email?.split('@')[0] || 'User',
+        role: role || 'citizen'
+      });
+
+      res.json({ user });
+    } catch (e) {
+      res.status(e.statusCode ?? 500).json({ error: e.message ?? 'Profile creation failed' });
+    }
   });
 
   // =============================================================================

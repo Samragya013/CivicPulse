@@ -1165,6 +1165,51 @@ function authToast(msg) {
   if (el) el.textContent = msg;
 }
 
+// Check if user exists in backend, if not create profile
+async function ensureUserProfile(firebaseUser) {
+  try {
+    const token = await firebaseUser.getIdToken();
+    
+    // Try to get user profile from backend
+    const res = await fetch(`${API_BASE}/api/user/profile`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.user;
+    }
+
+    // User doesn't exist in backend, create profile
+    // Default to citizen role, can be updated later
+    const createRes = await fetch(`${API_BASE}/api/user/profile`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+        email: firebaseUser.email,
+        role: 'citizen'
+      })
+    });
+
+    if (!createRes.ok) {
+      throw new Error('Failed to create user profile');
+    }
+
+    const createData = await createRes.json();
+    return createData.user;
+  } catch (error) {
+    console.error('Error ensuring user profile:', error);
+    throw error;
+  }
+}
+
 // Initialize auth particle effect
 function initAuthParticles() {
   const canvas = qs('#authParticles');
@@ -1249,6 +1294,8 @@ function setupAuthHandlers() {
   const showLoginBtn = qs('#showLoginBtn');
   const loginBtn = qs('#loginBtn');
   const signupBtn = qs('#signupBtn');
+  const googleLoginBtn = qs('#googleLoginBtn');
+  const googleSignupBtn = qs('#googleSignupBtn');
   const logoutBtn = qs('#logoutBtn');
 
   // Toggle between login and signup
@@ -1266,7 +1313,85 @@ function setupAuthHandlers() {
     authToast('');
   });
 
-  // Login button handler
+  // Google Sign-in Handler
+  const handleGoogleAuth = async (isSignup = false) => {
+    const btn = isSignup ? googleSignupBtn : googleLoginBtn;
+    const originalText = btn?.querySelector('.btnText')?.textContent;
+    
+    try {
+      if (btn) {
+        btn.disabled = true;
+        if (btn.querySelector('#googleBtnText')) {
+          btn.querySelector('#googleBtnText').textContent = 'Connecting...';
+        } else if (btn.querySelector('#googleSignupBtnText')) {
+          btn.querySelector('#googleSignupBtnText').textContent = 'Connecting...';
+        }
+      }
+      
+      authToast('🔐 Connecting to Google...');
+
+      const provider = new window.firebase.GoogleAuthProvider();
+      const result = await window.firebase.signInWithPopup(window.firebase.auth, provider);
+      const firebaseUser = result.user;
+
+      authToast('✅ Google authentication successful! Setting up profile...');
+
+      // Ensure user profile exists in backend
+      const userData = await ensureUserProfile(firebaseUser);
+
+      // Save to auth manager
+      await auth.save(firebaseUser, userData);
+
+      authToast('✅ Login successful! Loading app...');
+
+      // Hide auth screen and show main app
+      const authScreen = qs('#authScreen');
+      const mainHeader = qs('#mainHeader');
+      const mainLayout = qs('#mainLayout');
+
+      authScreen.style.display = 'none';
+      mainHeader.style.display = '';
+      mainLayout.style.display = '';
+
+      // Set isAdmin and update UI
+      isAdmin = auth.isAdmin();
+      const userChip = qs('#userChip');
+      if (userChip) {
+        userChip.textContent = `${auth.user.name} (${auth.user.role})`;
+        userChip.classList.add(auth.user.role === 'admin' ? 'chip--live' : 'chip--link');
+      }
+
+      // Initialize the main app
+      await initMainApp();
+    } catch (error) {
+      console.error('Google auth error:', error);
+      let errorMessage = 'Google authentication failed';
+      
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in cancelled';
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = 'Pop-up blocked. Please allow pop-ups for this site.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      authToast(`❌ ${errorMessage}`);
+      
+      if (btn) {
+        btn.disabled = false;
+        if (btn.querySelector('#googleBtnText')) {
+          btn.querySelector('#googleBtnText').textContent = originalText?.includes('Continue') ? 'Continue with Google' : 'Continue with Google';
+        } else if (btn.querySelector('#googleSignupBtnText')) {
+          btn.querySelector('#googleSignupBtnText').textContent = originalText?.includes('Sign up') ? 'Sign up with Google' : 'Sign up with Google';
+        }
+      }
+    }
+  };
+
+  googleLoginBtn?.addEventListener('click', () => handleGoogleAuth(false));
+  googleSignupBtn?.addEventListener('click', () => handleGoogleAuth(true));
+
+  // Email/Password Login
   loginBtn?.addEventListener('click', async (e) => {
     e.preventDefault();
     const email = qs('#loginEmail').value.trim();
@@ -1279,35 +1404,34 @@ function setupAuthHandlers() {
 
     authToast('🔐 Logging in...');
     loginBtn.disabled = true;
-    
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Login failed');
 
-      // Save token and user data
-      auth.save(data.token, data.user);
-      console.log('Login successful, token saved:', {
-        hasToken: !!auth.token,
-        user: auth.user
-      });
-      
+    try {
+      const userCredential = await window.firebase.signInWithEmailAndPassword(
+        window.firebase.auth,
+        email,
+        password
+      );
+      const firebaseUser = userCredential.user;
+
+      authToast('✅ Authentication successful! Loading profile...');
+
+      // Ensure user profile exists in backend
+      const userData = await ensureUserProfile(firebaseUser);
+
+      // Save to auth manager
+      await auth.save(firebaseUser, userData);
+
       authToast('✅ Login successful! Loading app...');
-      
+
       // Hide auth screen and show main app
       const authScreen = qs('#authScreen');
       const mainHeader = qs('#mainHeader');
       const mainLayout = qs('#mainLayout');
-      
+
       authScreen.style.display = 'none';
       mainHeader.style.display = '';
       mainLayout.style.display = '';
-      
+
       // Set isAdmin and update UI
       isAdmin = auth.isAdmin();
       const userChip = qs('#userChip');
@@ -1315,34 +1439,44 @@ function setupAuthHandlers() {
         userChip.textContent = `${auth.user.name} (${auth.user.role})`;
         userChip.classList.add(auth.user.role === 'admin' ? 'chip--live' : 'chip--link');
       }
-      
+
       // Initialize the main app
-      console.log('About to call initMainApp...');
       await initMainApp();
-      console.log('initMainApp call completed');
-    } catch (err) {
-      console.error('Login error:', err);
-      authToast(`❌ ${err.message || 'Login failed'}`);
+    } catch (error) {
+      console.error('Login error:', error);
+      let errorMessage = 'Login failed';
+      
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = 'Invalid email or password';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many attempts. Please try again later.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      authToast(`❌ ${errorMessage}`);
       loginBtn.disabled = false;
     }
   });
 
-  // Signup button handler
+  // Email/Password Signup
   signupBtn?.addEventListener('click', async (e) => {
     e.preventDefault();
-    
+
     const name = qs('#signupName').value.trim();
     const email = qs('#signupEmail').value.trim();
     const password = qs('#signupPassword').value;
     const roleInput = document.querySelector('input[name="role"]:checked');
-    
+
     if (!name || !email || !password) {
       authToast('⚠️ Please fill in all fields');
       return;
     }
 
-    if (password.length < 4) {
-      authToast('⚠️ Password must be at least 4 characters');
+    if (password.length < 6) {
+      authToast('⚠️ Password must be at least 6 characters');
       return;
     }
 
@@ -1355,35 +1489,53 @@ function setupAuthHandlers() {
 
     authToast('🚀 Creating account...');
     signupBtn.disabled = true;
-    
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role })
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Signup failed');
 
-      // Save token and user data
-      auth.save(data.token, data.user);
-      console.log('Signup successful, token saved:', {
-        hasToken: !!auth.token,
-        user: auth.user
+    try {
+      const userCredential = await window.firebase.createUserWithEmailAndPassword(
+        window.firebase.auth,
+        email,
+        password
+      );
+      const firebaseUser = userCredential.user;
+
+      authToast('✅ Account created! Setting up profile...');
+
+      // Create user profile in backend with selected role
+      const token = await firebaseUser.getIdToken();
+      const createRes = await fetch(`${API_BASE}/api/user/profile`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: name,
+          email: email,
+          role: role
+        })
       });
-      
+
+      if (!createRes.ok) {
+        throw new Error('Failed to create user profile');
+      }
+
+      const createData = await createRes.json();
+      const userData = createData.user;
+
+      // Save to auth manager
+      await auth.save(firebaseUser, userData);
+
       authToast('✅ Account created! Loading app...');
-      
+
       // Hide auth screen and show main app
       const authScreen = qs('#authScreen');
       const mainHeader = qs('#mainHeader');
       const mainLayout = qs('#mainLayout');
-      
+
       authScreen.style.display = 'none';
       mainHeader.style.display = '';
       mainLayout.style.display = '';
-      
+
       // Set isAdmin and update UI
       isAdmin = auth.isAdmin();
       const userChip = qs('#userChip');
@@ -1391,14 +1543,24 @@ function setupAuthHandlers() {
         userChip.textContent = `${auth.user.name} (${auth.user.role})`;
         userChip.classList.add(auth.user.role === 'admin' ? 'chip--live' : 'chip--link');
       }
-      
+
       // Initialize the main app
-      console.log('About to call initMainApp after signup...');
       await initMainApp();
-      console.log('initMainApp call completed after signup');
-    } catch (err) {
-      console.error('Signup error:', err);
-      authToast(`❌ ${err.message || 'Signup failed'}`);
+    } catch (error) {
+      console.error('Signup error:', error);
+      let errorMessage = 'Signup failed';
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Email already registered. Please login instead.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Please use a stronger password.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      authToast(`❌ ${errorMessage}`);
       signupBtn.disabled = false;
     }
   });
@@ -1432,89 +1594,191 @@ function setupAuthHandlers() {
       '👋'
     );
     if (confirmed) {
-      auth.clear();
-      window.location.reload();
+      try {
+        await window.firebase.signOut(window.firebase.auth);
+        auth.clear();
+        window.location.reload();
+      } catch (error) {
+        console.error('Logout error:', error);
+        // Fallback: clear local state and reload
+        auth.clear();
+        window.location.reload();
+      }
     }
   });
+
+  // Profile button handler
+  const profileBtn = qs('#profileBtn');
+  if (profileBtn) {
+    profileBtn.addEventListener('click', () => {
+      showProfileModal();
+    });
+  }
+}
+
+// Profile Modal Functions
+function showProfileModal() {
+  const modal = qs('#profileModal');
+  if (!modal || !auth.user || !auth.firebaseUser) return;
+
+  // Populate profile data
+  qs('#profileEmail').textContent = auth.user.email || '—';
+  
+  // Determine login provider
+  const providers = auth.firebaseUser.providerData || [];
+  let providerText = 'Email';
+  if (providers.length > 0) {
+    if (providers[0].providerId === 'google.com') {
+      providerText = 'Google';
+    } else if (providers[0].providerId === 'password') {
+      providerText = 'Email';
+    } else {
+      providerText = providers[0].providerId;
+    }
+  }
+  qs('#profileProvider').textContent = providerText;
+  
+  qs('#profileRole').textContent = auth.user.role === 'admin' ? 'Responder' : 'Citizen';
+  
+  // Format dates
+  const createdDate = auth.firebaseUser.metadata?.creationTime 
+    ? new Date(auth.firebaseUser.metadata.creationTime).toLocaleString()
+    : auth.user.created_at 
+      ? new Date(auth.user.created_at).toLocaleString()
+      : '—';
+  qs('#profileCreated').textContent = createdDate;
+  
+  const lastLoginDate = auth.firebaseUser.metadata?.lastSignInTime
+    ? new Date(auth.firebaseUser.metadata.lastSignInTime).toLocaleString()
+    : '—';
+  qs('#profileLastLogin').textContent = lastLoginDate;
+
+  modal.style.display = 'flex';
+
+  // Close button
+  const closeBtn = qs('#closeProfileBtn');
+  const overlay = modal.querySelector('.modalOverlay');
+  
+  const handleClose = () => {
+    modal.style.display = 'none';
+    closeBtn?.removeEventListener('click', handleClose);
+    overlay?.removeEventListener('click', handleClose);
+  };
+
+  closeBtn?.addEventListener('click', handleClose);
+  overlay?.addEventListener('click', handleClose);
+
+  // Delete account button
+  const deleteBtn = qs('#deleteAccountBtn');
+  const handleDelete = async () => {
+    const confirmed = await showModal(
+      'This permanently deletes your CivicPulse account and cannot be undone. All your data will be removed.',
+      'Delete Account',
+      '⚠️'
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      // Delete user from Firebase
+      await window.firebase.deleteUser(auth.firebaseUser);
+      
+      // Clear local state
+      auth.clear();
+      
+      // Show success message and reload
+      authToast('✅ Account deleted successfully');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      console.error('Delete account error:', error);
+      
+      let errorMessage = 'Failed to delete account';
+      if (error.code === 'auth/requires-recent-login') {
+        errorMessage = 'For security, please logout and login again before deleting your account.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  deleteBtn?.removeEventListener('click', handleDelete);
+  deleteBtn?.addEventListener('click', handleDelete);
 }
 
 async function checkAuth() {
   auth.init();
-  
-  console.log('checkAuth called:', {
-    isAuthenticated: auth.isAuthenticated(),
-    hasToken: !!auth.token,
-    hasUser: !!auth.user
-  });
 
-  const authScreen = qs('#authScreen');
-  const mainHeader = qs('#mainHeader');
-  const mainLayout = qs('#mainLayout');
+  return new Promise((resolve) => {
+    // Set up Firebase auth state listener
+    window.firebase.onAuthStateChanged(window.firebase.auth, async (firebaseUser) => {
+      console.log('Firebase auth state changed:', { hasUser: !!firebaseUser });
 
-  if (!auth.isAuthenticated()) {
-    console.log('Not authenticated, showing auth screen');
-    // Show auth screen
-    authScreen.style.display = 'flex';
-    mainHeader.style.display = 'none';
-    mainLayout.style.display = 'none';
-    setupAuthHandlers();
-    return false;
-  }
+      const authScreen = qs('#authScreen');
+      const mainHeader = qs('#mainHeader');
+      const mainLayout = qs('#mainLayout');
 
-  // Verify token is still valid
-  try {
-    console.log('Verifying token with server...');
-    const res = await fetch(`${API_BASE}/api/auth/verify`, {
-      headers: auth.getHeaders()
+      if (!firebaseUser) {
+        console.log('Not authenticated, showing auth screen');
+        // Show auth screen
+        authScreen.style.display = 'flex';
+        mainHeader.style.display = 'none';
+        mainLayout.style.display = 'none';
+        setupAuthHandlers();
+        resolve(false);
+        return;
+      }
+
+      try {
+        console.log('Firebase user authenticated, getting profile...');
+        
+        // Ensure user profile exists in backend
+        const userData = await ensureUserProfile(firebaseUser);
+        
+        // Save to auth manager
+        await auth.save(firebaseUser, userData);
+
+        console.log('Profile loaded:', userData);
+
+        // Token valid - hide auth screen, show main app
+        authScreen.style.display = 'none';
+        mainHeader.style.display = '';
+        mainLayout.style.display = '';
+
+        // Set isAdmin based on role
+        isAdmin = auth.isAdmin();
+
+        // Update UI
+        const userChip = qs('#userChip');
+        if (userChip) {
+          userChip.textContent = `${auth.user.name} (${auth.user.role})`;
+          userChip.classList.add(auth.user.role === 'admin' ? 'chip--live' : 'chip--link');
+        }
+
+        // Setup logout handler
+        if (!authHandlersSetup) {
+          setupAuthHandlers();
+        }
+
+        console.log('Authentication successful, showing main app');
+        resolve(true);
+      } catch (error) {
+        // Profile creation failed - logout and show auth screen
+        console.error('Auth setup error:', error);
+        await window.firebase.signOut(window.firebase.auth);
+        auth.clear();
+        authScreen.style.display = 'flex';
+        mainHeader.style.display = 'none';
+        mainLayout.style.display = 'none';
+        setupAuthHandlers();
+        authToast(`❌ ${error.message || 'Failed to load profile'}`);
+        resolve(false);
+      }
     });
-
-    if (!res.ok) {
-      console.error('Token verification failed:', res.status);
-      const errorData = await res.json().catch(() => ({}));
-      console.error('Error details:', errorData);
-      throw new Error('Invalid token');
-    }
-
-    const data = await res.json();
-    console.log('Token verified successfully:', data);
-    
-    // Update user data from verification response
-    if (data.user) {
-      auth.user = data.user;
-    }
-
-    // Token valid - hide auth screen, show main app
-    authScreen.style.display = 'none';
-    mainHeader.style.display = '';
-    mainLayout.style.display = '';
-
-    // Set isAdmin based on role
-    isAdmin = auth.isAdmin();
-
-    // Update UI
-    const userChip = qs('#userChip');
-    if (userChip) {
-      userChip.textContent = `${auth.user.name} (${auth.user.role})`;
-      userChip.classList.add(auth.user.role === 'admin' ? 'chip--live' : 'chip--link');
-    }
-
-    // Setup logout handler only (login/signup already set up)
-    if (!authHandlersSetup) {
-      setupAuthHandlers();
-    }
-
-    console.log('Authentication successful, showing main app');
-    return true;
-  } catch (err) {
-    // Token invalid - logout and show auth screen
-    console.error('Auth verification error:', err);
-    auth.clear();
-    authScreen.style.display = 'flex';
-    mainHeader.style.display = 'none';
-    mainLayout.style.display = 'none';
-    setupAuthHandlers();
-    return false;
-  }
+  });
 }
 
 // Initialize main app after authentication

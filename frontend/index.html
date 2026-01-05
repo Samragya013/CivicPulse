@@ -11,6 +11,40 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="poll-results-styles.css" />
     <script src="config.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+      import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
+      import {
+        getAuth,
+        GoogleAuthProvider,
+        signInWithPopup,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut,
+        deleteUser
+      } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+
+      // Firebase configuration loaded from config.js
+      const firebaseConfig = window.FIREBASE_CONFIG;
+
+      const app = initializeApp(firebaseConfig);
+      getAnalytics(app);
+
+      window.firebase = {
+        app,
+        auth: getAuth(app),
+        GoogleAuthProvider,
+        signInWithPopup,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut,
+        deleteUser
+      };
+    </script>
   </head>
   <body>
     <canvas class="bg-particles" id="particles" aria-hidden="true"></canvas>
@@ -37,7 +71,20 @@
         <!-- Login Form -->
         <div id="loginForm" class="authForm">
           <h2>Welcome Back</h2>
-          <p class="authSubtitle">Sign in to access the command center</p>
+          <p class="authSubtitle">Welcome back — your city needs your voice.</p>
+          
+          <!-- Google Sign-in Button -->
+          <button class="authButton authButton--google" id="googleLoginBtn" type="button">
+            <span class="btnText">
+              <span style="display: inline-block; margin-right: 8px;">🔵</span>
+              <span id="googleBtnText">Continue with Google</span>
+            </span>
+            <span class="btnShine"></span>
+          </button>
+
+          <div class="authDivider">
+            <span>or use email</span>
+          </div>
           
           <div class="inputGroup">
             <div class="inputIcon">📧</div>
@@ -66,7 +113,20 @@
         <!-- Signup Form -->
         <div id="signupForm" class="authForm" hidden>
           <h2>Join the Response Team</h2>
-          <p class="authSubtitle">Create your account to get started</p>
+          <p class="authSubtitle">Create your CivicPulse account to start participating.</p>
+          
+          <!-- Google Sign-up Button -->
+          <button class="authButton authButton--google" id="googleSignupBtn" type="button">
+            <span class="btnText">
+              <span style="display: inline-block; margin-right: 8px;">🔵</span>
+              <span id="googleSignupBtnText">Sign up with Google</span>
+            </span>
+            <span class="btnShine"></span>
+          </button>
+
+          <div class="authDivider">
+            <span>or create with email</span>
+          </div>
           
           <div class="inputGroup">
             <div class="inputIcon">👤</div>
@@ -80,7 +140,7 @@
           
           <div class="inputGroup">
             <div class="inputIcon">🔒</div>
-            <input class="authInput" type="password" id="signupPassword" placeholder="Password (min 4 characters)" required minlength="4" />
+            <input class="authInput" type="password" id="signupPassword" placeholder="Password (min 6 characters)" required minlength="6" />
           </div>
           
           <div class="roleSelection">
@@ -145,6 +205,7 @@
         <div class="chip" id="pollChip">Polling Active</div>
         <div class="chip" id="refreshChip">Last refresh: —</div>
         <button class="viewToggle" id="viewToggle" title="Switch view">Admin View</button>
+        <button class="btn btn--primary" id="profileBtn" style="margin-left: 8px;">Profile</button>
         <button class="btn btn--danger" id="logoutBtn" style="margin-left: 8px;">Logout</button>
       </div>
     </header>
@@ -348,6 +409,47 @@
         <div class="modalButtons">
           <button class="modalBtn modalBtn--cancel" id="modalCancelBtn">Cancel</button>
           <button class="modalBtn modalBtn--confirm" id="modalConfirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILE MODAL -->
+    <div id="profileModal" class="customModal" style="display: none;">
+      <div class="modalOverlay"></div>
+      <div class="modalContent" style="max-width: 500px;">
+        <div class="modalIcon">👤</div>
+        <h3 class="modalTitle">Your Profile</h3>
+        
+        <div style="text-align: left; margin: 24px 0; color: rgba(234,240,255,0.85);">
+          <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(139,157,195,0.2);">
+            <div style="font-size: 12px; color: rgba(234,240,255,0.55); margin-bottom: 4px;">Email</div>
+            <div style="font-size: 14px; font-weight: 500;" id="profileEmail">—</div>
+          </div>
+          
+          <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(139,157,195,0.2);">
+            <div style="font-size: 12px; color: rgba(234,240,255,0.55); margin-bottom: 4px;">Login Provider</div>
+            <div style="font-size: 14px; font-weight: 500;" id="profileProvider">—</div>
+          </div>
+          
+          <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(139,157,195,0.2);">
+            <div style="font-size: 12px; color: rgba(234,240,255,0.55); margin-bottom: 4px;">Role</div>
+            <div style="font-size: 14px; font-weight: 500;" id="profileRole">—</div>
+          </div>
+          
+          <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(139,157,195,0.2);">
+            <div style="font-size: 12px; color: rgba(234,240,255,0.55); margin-bottom: 4px;">Account Created</div>
+            <div style="font-size: 14px; font-weight: 500;" id="profileCreated">—</div>
+          </div>
+          
+          <div style="margin-bottom: 16px;">
+            <div style="font-size: 12px; color: rgba(234,240,255,0.55); margin-bottom: 4px;">Last Login</div>
+            <div style="font-size: 14px; font-weight: 500;" id="profileLastLogin">—</div>
+          </div>
+        </div>
+        
+        <div class="modalButtons" style="flex-direction: column; gap: 12px;">
+          <button class="modalBtn modalBtn--danger" id="deleteAccountBtn" style="width: 100%;">Delete Account</button>
+          <button class="modalBtn modalBtn--cancel" id="closeProfileBtn" style="width: 100%;">Close</button>
         </div>
       </div>
     </div>
